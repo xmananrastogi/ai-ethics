@@ -1,18 +1,23 @@
 import os
 import uuid
 import hashlib
-from fastapi import APIRouter, Depends, UploadFile, File, Form, HTTPException, status, Request
+from fastapi import APIRouter, Depends, UploadFile, File, Form, HTTPException, status, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse, Response
 from thoa_screening.services.report_generator import generate_report
 from sqlalchemy.orm import Session
+from thoa_screening.api.websockets import manager
 from typing import List
 
 from thoa_screening.api.deps import get_db
 from thoa_screening.api.schemas import (
     DocumentUploadResponse, ScreeningResultResponse, ErrorResponse, AuditLogResponse,
-    CaseSummary, CaseDetail, CaseCreate, DecisionSubmit, PersonDetail
+    CaseSummary, CaseDetail, CaseCreate, DecisionSubmit, PersonDetail,
+    HumanCorrectionCreate, HumanCorrectionResponse
 )
-from thoa_screening.database.models import Case, Document, DocumentType, RuleResult, AuditAction, AuditLog, CaseStatus, Donor, Recipient, RelationType, User
+from thoa_screening.database.models import (
+    Case, Document, DocumentType, RuleResult, AuditAction, AuditLog, 
+    CaseStatus, Donor, Recipient, RelationType, User, HumanCorrection
+)
 from thoa_screening.services.screening import screen_case, ScreeningError
 from thoa_screening.services.explanations import ExplanationGenerator
 from thoa_screening.services.audit import audit_log
@@ -24,6 +29,16 @@ ALLOWED_CONTENT_TYPES = ["application/pdf", "image/jpeg", "image/png"]
 UPLOAD_DIR = "./uploads"
 
 os.makedirs(UPLOAD_DIR, exist_ok=True)
+
+@router.websocket("/ws/{case_id}")
+async def websocket_endpoint(websocket: WebSocket, case_id: str):
+    await manager.connect(websocket, case_id)
+    try:
+        while True:
+            # We don't expect the client to send much, but keep the connection alive
+            data = await websocket.receive_text()
+    except WebSocketDisconnect:
+        manager.disconnect(websocket, case_id)
 
 @router.post("/{case_id}/documents", response_model=DocumentUploadResponse, responses={400: {"model": ErrorResponse}, 404: {"model": ErrorResponse}})
 @audit_log(AuditAction.DOCUMENT_UPLOADED)
@@ -83,6 +98,14 @@ async def upload_document(
     db.commit()
     db.refresh(doc)
     
+    # Broadcast to websocket
+    import asyncio
+    asyncio.create_task(manager.broadcast({
+        "event": "document_uploaded",
+        "document_id": str(doc.id),
+        "filename": doc.original_filename
+    }, str(case_id)))
+    
     return DocumentUploadResponse(
         document_id=str(doc.id),
         original_filename=doc.original_filename
@@ -90,7 +113,7 @@ async def upload_document(
 
 @router.post("/{case_id}/screen", response_model=ScreeningResultResponse, status_code=status.HTTP_202_ACCEPTED, responses={400: {"model": ErrorResponse}, 404: {"model": ErrorResponse}})
 @audit_log(AuditAction.RULES_EVALUATED)
-def trigger_screening(
+async def trigger_screening(
     case_id: uuid.UUID,
     request: Request,
     db: Session = Depends(get_db)
@@ -107,6 +130,8 @@ def trigger_screening(
     # Set status to UNDER_REVIEW while processing
     case.status = CaseStatus.UNDER_REVIEW
     db.commit()
+    
+    await manager.broadcast({"event": "screening_started", "message": "Starting Rule Evaluation DAG..."}, str(case_id))
     
     try:
         # Run the REAL OCR and Rule Engine pipeline synchronously
@@ -382,3 +407,38 @@ def submit_decision(
         
     db.commit()
     return {"message": "Decision submitted successfully", "status": case.status.value}
+
+
+@router.post("/{case_id}/corrections", response_model=HumanCorrectionResponse)
+def submit_human_correction(
+    case_id: uuid.UUID,
+    correction: HumanCorrectionCreate,
+    db: Session = Depends(get_db)
+):
+    """
+    Submit a human-in-the-loop (HITL) correction for OCR/NLP extracted data.
+    """
+    case = db.query(Case).filter(Case.id == case_id).first()
+    if not case:
+        raise HTTPException(status_code=404, detail="Case not found.")
+
+    # Using dummy admin for MVP
+    dummy_user = db.query(User).first()
+    
+    new_correction = HumanCorrection(
+        case_id=case_id,
+        corrected_by_id=dummy_user.id if dummy_user else None,
+        field_name=correction.field_name,
+        original_text=correction.original_text,
+        corrected_text=correction.corrected_text
+    )
+    db.add(new_correction)
+    db.commit()
+    db.refresh(new_correction)
+    
+    return HumanCorrectionResponse(
+        id=new_correction.id,
+        field_name=new_correction.field_name,
+        corrected_text=new_correction.corrected_text,
+        created_at=new_correction.created_at
+    )

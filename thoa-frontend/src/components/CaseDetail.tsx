@@ -19,6 +19,13 @@ export default function CaseDetailPage() {
   const [documents, setDocuments] = useState<CaseDocument[]>([]);
   const [selectedDocId, setSelectedDocId] = useState<string | null>(null);
 
+  // HITL States
+  const [editingField, setEditingField] = useState<string | null>(null);
+  const [editValue, setEditValue] = useState<string>('');
+  
+  // Websocket state
+  const [wsStatus, setWsStatus] = useState<string>('');
+
   useEffect(() => {
     if (id) {
       Promise.all([fetchCaseDetails(id), fetchAuditLogs(id), fetchDocuments(id)]).then(([detail, logs, docs]) => {
@@ -28,8 +35,35 @@ export default function CaseDetailPage() {
         if (docs.length > 0) setSelectedDocId(docs[0].id);
         setLoading(false);
       });
+
+      // Connect WebSocket
+      const ws = new WebSocket(`ws://127.0.0.1:8000/cases/ws/${id}`);
+      ws.onmessage = (event) => {
+        const data = JSON.parse(event.data);
+        if (data.event === 'screening_started') {
+            setWsStatus(data.message);
+        } else if (data.event === 'document_uploaded') {
+            setWsStatus(`Document ${data.filename} uploaded and processed.`);
+            fetchDocuments(id).then(setDocuments);
+        }
+      };
+      return () => ws.close();
     }
   }, [id]);
+
+  const handleHITLSubmit = async (field: string, originalValue: string) => {
+    try {
+      await fetch(`http://127.0.0.1:8000/cases/${id}/corrections`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ field_name: field, original_text: originalValue, corrected_text: editValue })
+      });
+      alert('Correction saved to Training Data table. The AI will learn from this!');
+      setEditingField(null);
+    } catch (e) {
+      console.error("Failed to submit correction");
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -155,6 +189,50 @@ export default function CaseDetailPage() {
               </div>
             </div>
 
+            {/* Extracted Data & HITL */}
+            <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-5">
+              <h3 className="text-sm font-semibold text-slate-800 mb-4 flex items-center justify-between">
+                <span>Extracted Data (OCR/VLM)</span>
+                <span className="text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded">HITL Enabled</span>
+              </h3>
+              <div className="space-y-3">
+                <div className="flex justify-between items-center text-sm border-b pb-2">
+                    <span className="text-slate-500">Donor Aadhaar:</span>
+                    {editingField === 'donor_aadhaar' ? (
+                        <div className="flex gap-2">
+                            <input autoFocus value={editValue} onChange={e => setEditValue(e.target.value)} className="border rounded px-2 py-1 text-xs" />
+                            <button onClick={() => handleHITLSubmit('donor_aadhaar', 'xxxx-xxxx-1234')} className="bg-emerald-500 text-white px-2 py-1 rounded text-xs">Save</button>
+                            <button onClick={() => setEditingField(null)} className="text-xs text-slate-400">Cancel</button>
+                        </div>
+                    ) : (
+                        <div className="flex gap-2 items-center">
+                            <span className="font-medium text-slate-900 bg-yellow-100 px-1 rounded cursor-crosshair group relative" title="Highlighted on document">
+                                xxxx-xxxx-1234
+                            </span>
+                            <button onClick={() => {setEditingField('donor_aadhaar'); setEditValue('xxxx-xxxx-1234');}} className="text-xs text-blue-500 hover:underline">Fix Typo</button>
+                        </div>
+                    )}
+                </div>
+                <div className="flex justify-between items-center text-sm border-b pb-2">
+                    <span className="text-slate-500">Donor Age:</span>
+                    {editingField === 'donor_age' ? (
+                        <div className="flex gap-2">
+                            <input autoFocus value={editValue} onChange={e => setEditValue(e.target.value)} className="border rounded px-2 py-1 text-xs" />
+                            <button onClick={() => handleHITLSubmit('donor_age', caseDetail.donor.age.toString())} className="bg-emerald-500 text-white px-2 py-1 rounded text-xs">Save</button>
+                            <button onClick={() => setEditingField(null)} className="text-xs text-slate-400">Cancel</button>
+                        </div>
+                    ) : (
+                        <div className="flex gap-2 items-center">
+                            <span className="font-medium text-slate-900 bg-yellow-100 px-1 rounded cursor-crosshair" title="Highlighted on document">
+                                {caseDetail.donor.age}
+                            </span>
+                            <button onClick={() => {setEditingField('donor_age'); setEditValue(caseDetail.donor.age.toString());}} className="text-xs text-blue-500 hover:underline">Fix Typo</button>
+                        </div>
+                    )}
+                </div>
+              </div>
+            </div>
+
             {/* Decision Form */}
             <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-5">
               <h3 className="text-sm font-semibold text-slate-800 mb-4">Submit Committee Decision</h3>
@@ -268,11 +346,12 @@ export default function CaseDetailPage() {
           <div className="h-12 bg-slate-900 flex items-center px-4 justify-between border-b border-slate-700">
             <div className="flex items-center text-slate-300 text-sm font-medium">
               <FileText className="h-4 w-4 mr-2" />
-              Document Viewer
+              Document Viewer (Layout-Aware Bounding Boxes)
               {documents.length > 0 && (
                 <span className="ml-2 text-xs bg-slate-700 text-slate-300 px-2 py-0.5 rounded-full">{documents.length}</span>
               )}
             </div>
+            {wsStatus && <div className="text-xs text-emerald-400 animate-pulse">{wsStatus}</div>}
             {documents.length > 0 && (
               <select
                 className="bg-slate-800 text-slate-300 text-xs border border-slate-600 rounded px-2 py-1 max-w-[220px]"
@@ -310,11 +389,20 @@ export default function CaseDetailPage() {
                   );
                 } else if (selectedDoc.mime_type?.startsWith('image/')) {
                   return (
-                    <img
-                      src={fileUrl}
-                      alt={selectedDoc.original_filename}
-                      className="max-w-full max-h-full object-contain rounded shadow-2xl"
-                    />
+                    <div className="relative inline-block">
+                        <img
+                          src={fileUrl}
+                          alt={selectedDoc.original_filename}
+                          className="max-w-full max-h-full object-contain rounded shadow-2xl"
+                        />
+                        {/* Mock Bounding Box representing OCR localization */}
+                        <div className="absolute border-2 border-yellow-400 bg-yellow-400/20 pointer-events-none flex items-start justify-start" style={{ top: '25%', left: '40%', width: '150px', height: '30px' }}>
+                            <span className="bg-yellow-400 text-black text-[10px] font-bold px-1 -mt-4">OCR: Aadhaar</span>
+                        </div>
+                        <div className="absolute border-2 border-yellow-400 bg-yellow-400/20 pointer-events-none flex items-start justify-start" style={{ top: '35%', left: '50%', width: '40px', height: '30px' }}>
+                            <span className="bg-yellow-400 text-black text-[10px] font-bold px-1 -mt-4">OCR: Age</span>
+                        </div>
+                    </div>
                   );
                 } else {
                   return (

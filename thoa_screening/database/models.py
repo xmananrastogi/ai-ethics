@@ -1142,3 +1142,56 @@ def receive_before_update(mapper, connection, target):
 @event.listens_for(AuditLog, "before_delete")
 def receive_before_delete(mapper, connection, target):
     raise NotImplementedError("AuditLog records are strictly immutable and cannot be deleted.")
+
+
+# ===================================================================
+# 10. HUMAN CORRECTION (HITL)
+# ===================================================================
+
+class HumanCorrection(TimestampMixin, Base):
+    """
+    Human-in-the-Loop (HITL) feedback model.
+    Stores manual corrections to OCR/NLP extracted data, providing a
+    self-healing mechanism for future model fine-tuning.
+    """
+
+    __tablename__ = "human_corrections"
+    __table_args__ = (
+        Index("ix_human_corrections_case_field", "case_id", "field_name"),
+        {"comment": "HITL corrections for fine-tuning extraction models."},
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, primary_key=True, default=uuid.uuid4,
+    )
+    case_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid,
+        ForeignKey("cases.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    # corrected_by_id made optional since we don't strictly enforce auth in MVP,
+    # or we can use a hardcoded user if auth is mocked.
+    corrected_by_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        Uuid,
+        ForeignKey("users.id"),
+        nullable=True,
+    )
+    field_name: Mapped[str] = mapped_column(
+        String(100), nullable=False,
+        doc="Name of the field that was corrected (e.g. 'donor_age').",
+    )
+    original_text: Mapped[str] = mapped_column(
+        Text, nullable=False,
+        doc="The incorrect text extracted by OCR/NLP.",
+    )
+    corrected_text: Mapped[str] = mapped_column(
+        Text, nullable=False,
+        doc="The correct text provided by the human operator.",
+    )
+
+    def __repr__(self) -> str:
+        return (
+            f"HumanCorrection(id={self.id!s:.8}, field='{self.field_name}', "
+            f"original='{self.original_text}', corrected='{self.corrected_text}')"
+        )

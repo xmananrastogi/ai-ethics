@@ -22,17 +22,37 @@ class RuleEngine:
 
     def evaluate(self, case: TransplantCase) -> tuple[CaseStatus, list[dict[str, Any]]]:
         """
-        Evaluate all rules against the case.
-
-        Returns:
-            tuple[CaseStatus, list[dict]]: The derived case status and the list
-            of rule results (structured for RuleResult DB ingestion).
+        Evaluate all rules against the case using a Directed Acyclic Graph (DAG) approach.
+        This skips entire branches (like Non-Relative checks) if the root condition fails.
         """
         results: list[dict[str, Any]] = []
-
-        # We map methods to rule IDs if they are automatable
+        
+        # Define the DAG branches based on RelationType
+        # This replaces linear evaluation with branching logic
+        is_near_relative = case.relation_type in {
+            RelationType.SPOUSE, RelationType.PARENT_CHILD,
+            RelationType.SIBLING, RelationType.GRANDPARENT_GRANDCHILD
+        }
+        
         for rule_def in self.rules:
             rule_code = rule_def["rule_id"]
+            
+            # DAG Branching Logic: Skip entire branches dynamically
+            if is_near_relative and rule_code in ["REL-04", "REL-05", "COM-02", "COM-03"]:
+                results.append(self._build_result(
+                    rule_code=rule_code, rule_def=rule_def,
+                    outcome=RuleOutcome.SKIPPED, severity="INFO",
+                    message="Skipped by DAG: Not applicable for Near-Relatives."
+                ))
+                continue
+                
+            if not is_near_relative and rule_code in ["REL-01", "REL-02", "REL-03"]:
+                results.append(self._build_result(
+                    rule_code=rule_code, rule_def=rule_def,
+                    outcome=RuleOutcome.SKIPPED, severity="INFO",
+                    message="Skipped by DAG: Not applicable for Non-Relatives."
+                ))
+                continue
             
             method_name = f"_evaluate_{rule_code.replace('-', '_').lower()}"
             if hasattr(self, method_name):
@@ -46,7 +66,6 @@ class RuleEngine:
                     message=message,
                 ))
             else:
-                # Rule is not automated or not implemented yet
                 results.append(self._build_result(
                     rule_code=rule_code,
                     rule_def=rule_def,

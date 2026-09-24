@@ -91,3 +91,14 @@ class DecisionSubmit(BaseModel):
     decision: str
     comment: str
     justification: Optional[str] = None
+
+class HumanCorrectionCreate(BaseModel):
+    field_name: str
+    original_text: str
+    corrected_text: str
+
+class HumanCorrectionResponse(BaseModel):
+    id: uuid.UUID
+    field_name: str
+    corrected_text: str
+    created_at: datetime
