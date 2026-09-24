@@ -1,0 +1,78 @@
+version: "3.8"
+
+services:
+  db:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER: thoa_user
+      POSTGRES_PASSWORD: thoa_password
+      POSTGRES_DB: thoa_db
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    restart: unless-stopped
+    volumes:
+      - redis_data:/data
+
+  backend:
+    build: 
+      context: .
+      dockerfile: Dockerfile
+    command: uvicorn thoa_screening.api.main:app --host 0.0.0.0 --port 8000
+    environment:
+      - THOA_DATABASE_URL=postgresql://thoa_user:thoa_password@db:5432/thoa_db
+      - CELERY_BROKER_URL=redis://redis:6379/0
+    ports:
+      - "8000:8000"
+    depends_on:
+      - db
+      - redis
+    volumes:
+      - ./uploads:/app/uploads
+    restart: unless-stopped
+
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: celery -A thoa_screening.worker.celery_app worker --loglevel=info
+    environment:
+      - THOA_DATABASE_URL=postgresql://thoa_user:thoa_password@db:5432/thoa_db
+      - CELERY_BROKER_URL=redis://redis:6379/0
+    depends_on:
+      - db
+      - redis
+    volumes:
+      - ./uploads:/app/uploads
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./thoa-frontend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/ssl:/etc/letsencrypt:ro
+      - ./nginx/certbot-www:/var/www/certbot
+    depends_on:
+      - backend
+      - frontend
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  redis_data:

@@ -1,0 +1,220 @@
+{
+  "_metadata": {
+    "description": "Rule definitions for the THOA screening engine.",
+    "version": "1.1.0",
+    "last_legal_review": null,
+    "maintainer_note": "Rule identifiers map to the implementation plan. Rules flagged with needs_legal_verification must be reviewed."
+  },
+  "rules": [
+    {
+      "rule_id": "ID-01",
+      "rule_name": "Donor Minimum Age Check",
+      "category": "Identity Verification",
+      "severity": "CRITICAL",
+      "thoa_reference": "Section 3, THOA 1994; Section 9(1B), THOA 2011 Amdt.",
+      "required_fields": ["donor.age", "donor.date_of_birth"],
+      "logic_description": "A living donor must be at least 18 years of age.",
+      "needs_legal_verification": false
+    },
+    {
+      "rule_id": "ID-02",
+      "rule_name": "Donor Mental Capacity Check",
+      "category": "Identity Verification",
+      "severity": "CRITICAL",
+      "thoa_reference": "Section 9(1C), THOA 2011 Amdt.",
+      "required_fields": ["donor.mental_capacity_assessment"],
+      "logic_description": "Organ removal from a mentally challenged person is prohibited without prescribed exception.",
+      "needs_legal_verification": true
+    },
+    {
+      "rule_id": "ID-03",
+      "rule_name": "Aadhaar / Identity Document Verification",
+      "category": "Identity Verification",
+      "severity": "CRITICAL",
+      "thoa_reference": "THO Rules 2014",
+      "required_fields": ["donor.aadhaar_number", "recipient.aadhaar_number", "documents.identity_proof_submitted"],
+      "logic_description": "Government-issued identity proof must be submitted.",
+      "needs_legal_verification": true
+    },
+    {
+      "rule_id": "ID-04",
+      "rule_name": "Foreign National Embassy Certificate",
+      "category": "Identity Verification",
+      "severity": "CRITICAL",
+      "thoa_reference": "Form 21, THO Rules 2014; Section 9(1A), THOA 2011 Amdt.",
+      "required_fields": ["donor.nationality", "recipient.nationality", "documents.has_form_21"],
+      "logic_description": "Foreign nationals require Form 21 (Relationship certificate).",
+      "needs_legal_verification": false
+    },
+    {
+      "rule_id": "ID-05",
+      "rule_name": "Domicile Verification for Cross-State Cases",
+      "category": "Identity Verification",
+      "severity": "WARNING",
+      "thoa_reference": "Form 20, THO Rules 2014",
+      "required_fields": ["donor.state_of_residence", "recipient.state_of_residence", "hospital.state", "documents.has_form_20"],
+      "logic_description": "Cross-state cases require Form 20 (Domicile certificate).",
+      "needs_legal_verification": true
+    },
+    {
+      "rule_id": "REL-01",
+      "rule_name": "Near Relative Enumeration Check",
+      "category": "Relationship Verification",
+      "severity": "INFO",
+      "thoa_reference": "Section 2(i), THOA 1994 (2011 Amdt.)",
+      "required_fields": ["case.relation_type", "declared_specific_relationship"],
+      "logic_description": "Near relatives are spouse, son, daughter, father, mother, brother, sister, grandfather, grandmother, grandson, granddaughter.",
+      "needs_legal_verification": false
+    },
+    {
+      "rule_id": "REL-02",
+      "rule_name": "Near Relative Documentation",
+      "category": "Relationship Verification",
+      "severity": "CRITICAL",
+      "thoa_reference": "Forms 1 and 2, THO Rules 2014",
+      "required_fields": ["case.relation_type", "documents.has_form_1", "documents.has_form_2"],
+      "logic_description": "Near-relative donors require Form 1 or Form 2.",
+      "needs_legal_verification": false
+    },
+    {
+      "rule_id": "REL-03",
+      "rule_name": "Genetic Relationship Certification",
+      "category": "Relationship Verification",
+      "severity": "WARNING",
+      "thoa_reference": "Form 5, THO Rules 2014",
+      "required_fields": ["case.relation_type", "documents.has_form_5", "documents.dna_test_match"],
+      "logic_description": "Biological relatives may require Form 5 / DNA test.",
+      "needs_legal_verification": true
+    },
+    {
+      "rule_id": "REL-04",
+      "rule_name": "Non-Relative Requires Authorization Committee",
+      "category": "Relationship Verification",
+      "severity": "WARNING",
+      "thoa_reference": "Section 9(3), THOA 1994 (2011 Amdt.)",
+      "required_fields": ["case.relation_type"],
+      "logic_description": "Non-near relative donations must be reviewed by the Authorization Committee.",
+      "needs_legal_verification": false
+    },
+    {
+      "rule_id": "REL-05",
+      "rule_name": "Non-Relative Consent Form",
+      "category": "Relationship Verification",
+      "severity": "CRITICAL",
+      "thoa_reference": "Forms 3 and 11, THO Rules 2014",
+      "required_fields": ["case.relation_type", "documents.has_form_3", "documents.has_form_11"],
+      "logic_description": "Non-relative donors require Form 3 and Form 11.",
+      "needs_legal_verification": false
+    },
+    {
+      "rule_id": "REL-06",
+      "rule_name": "Foreign National Near-Relative Requires Committee",
+      "category": "Relationship Verification",
+      "severity": "WARNING",
+      "thoa_reference": "Section 9(1A), THOA 2011 Amdt.",
+      "required_fields": ["donor.nationality", "recipient.nationality", "case.relation_type"],
+      "logic_description": "Any foreign national involvement triggers committee review.",
+      "needs_legal_verification": false
+    },
+    {
+      "rule_id": "SPEC-01",
+      "rule_name": "Affection and Attachment",
+      "category": "Special Cases",
+      "severity": "INFO",
+      "thoa_reference": "Section 9(3), THOA 1994 (2011 Amdt.)",
+      "required_fields": ["narrative_statements", "photographs"],
+      "logic_description": "Subjective legal standard for non-relative donation.",
+      "needs_legal_verification": false
+    },
+    {
+      "rule_id": "SPEC-02",
+      "rule_name": "Swap Transplant Verification",
+      "category": "Special Cases",
+      "severity": "CRITICAL",
+      "thoa_reference": "Section 9(3A), THOA 2011 Amdt.",
+      "required_fields": ["case.is_swap", "swap_pair_details", "pair_a.relation_type", "pair_b.relation_type"],
+      "logic_description": "Swap donations require committee approval and biological incompatibility.",
+      "needs_legal_verification": true
+    },
+    {
+      "rule_id": "SPEC-03",
+      "rule_name": "Minor Recipient Guardian Consent",
+      "category": "Special Cases",
+      "severity": "WARNING",
+      "thoa_reference": "THOA 1994",
+      "required_fields": ["recipient.age", "documents.guardian_consent"],
+      "logic_description": "Minors receiving organs need guardian consent.",
+      "needs_legal_verification": true
+    },
+    {
+      "rule_id": "SPEC-04",
+      "rule_name": "Medical Fitness Certification",
+      "category": "Special Cases",
+      "severity": "CRITICAL",
+      "thoa_reference": "Form 4, THO Rules 2014",
+      "required_fields": ["documents.has_form_4"],
+      "logic_description": "Every living donor must have a medical fitness certification (Form 4).",
+      "needs_legal_verification": false
+    },
+    {
+      "rule_id": "COM-01",
+      "rule_name": "Financial Affidavit",
+      "category": "Anti-Commercialization",
+      "severity": "CRITICAL",
+      "thoa_reference": "Section 9(3), THOA 1994 (2011 Amdt.)",
+      "required_fields": ["case.relation_type", "documents.has_financial_affidavit"],
+      "logic_description": "Both donor and recipient must submit a sworn affidavit declaring no commercial dealing.",
+      "needs_legal_verification": true
+    },
+    {
+      "rule_id": "COM-02",
+      "rule_name": "Police Verification Report",
+      "category": "Anti-Commercialization",
+      "severity": "CRITICAL",
+      "thoa_reference": "Authorization Committee guidelines",
+      "required_fields": ["case.relation_type", "documents.police_verification"],
+      "logic_description": "For non-relative and foreign-national donations, a police verification report is required.",
+      "needs_legal_verification": true
+    },
+    {
+      "rule_id": "COM-03",
+      "rule_name": "Income Disparity Anomaly Detection",
+      "category": "Anti-Commercialization",
+      "severity": "WARNING",
+      "thoa_reference": "Authorization Committee criteria",
+      "required_fields": ["donor.monthly_income", "recipient.monthly_income", "case.relation_type"],
+      "logic_description": "A large income disparity between a non-relative donor and recipient triggers a warning.",
+      "needs_legal_verification": true
+    },
+    {
+      "rule_id": "COM-04",
+      "rule_name": "Section 19 Penalty Documentation",
+      "category": "Anti-Commercialization",
+      "severity": "INFO",
+      "thoa_reference": "Section 19, THOA 1994 (2011 Amdt.)",
+      "required_fields": [],
+      "logic_description": "Penalties for commercial dealings (informational reference).",
+      "needs_legal_verification": false
+    },
+    {
+      "rule_id": "COM-05",
+      "rule_name": "Section 18 Unauthorized Removal",
+      "category": "Anti-Commercialization",
+      "severity": "CRITICAL",
+      "thoa_reference": "Section 18, THOA 1994 (2011 Amdt.)",
+      "required_fields": ["documents.all_required_forms_present", "hospital.registration_valid"],
+      "logic_description": "Penalties for unauthorized removal without hospital registration or required forms.",
+      "needs_legal_verification": false
+    },
+    {
+      "rule_id": "COM-06",
+      "rule_name": "Hospital Registration Validity",
+      "category": "Anti-Commercialization",
+      "severity": "CRITICAL",
+      "thoa_reference": "Section 14, THOA 1994",
+      "required_fields": ["hospital.registration_number", "hospital.registration_expiry"],
+      "logic_description": "Only hospitals registered under THOA can perform organ transplants.",
+      "needs_legal_verification": true
+    }
+  ]
+}

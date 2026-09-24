@@ -1,0 +1,135 @@
+{
+  "_metadata": {
+    "description": "Document requirements per relation type under THOA 1994 + 2011 Amendment + 2014 Rules.",
+    "version": "1.1.0",
+    "last_legal_review": null,
+    "maintainer_note": "All section references MUST be verified by a qualified legal professional before production use."
+  },
+
+  "legal_references": {
+    "form_1": {
+      "description": "Consent for donation by living near-relative donor",
+      "section": "THO Rules 2014",
+      "needs_legal_verification": false
+    },
+    "form_2": {
+      "description": "Consent for donation by living spousal donor",
+      "section": "THO Rules 2014",
+      "needs_legal_verification": false
+    },
+    "form_3": {
+      "description": "Consent for donation by non-near-relative donor",
+      "section": "THO Rules 2014",
+      "needs_legal_verification": false
+    },
+    "form_4": {
+      "description": "Medical fitness certification of living donor",
+      "section": "THO Rules 2014",
+      "needs_legal_verification": false
+    },
+    "form_5": {
+      "description": "Certification of genetic relationship",
+      "section": "THO Rules 2014",
+      "needs_legal_verification": true
+    },
+    "form_10": {
+      "description": "Brain stem death certification",
+      "section": "THO Rules 2014",
+      "needs_legal_verification": false
+    },
+    "form_11": {
+      "description": "Joint application for transplant approval",
+      "section": "THO Rules 2014",
+      "needs_legal_verification": false
+    },
+    "form_20": {
+      "description": "Domicile verification certificate for cross-state transplants",
+      "section": "Rule 20, THO Rules 2014",
+      "needs_legal_verification": true
+    },
+    "form_21": {
+      "description": "Relationship certificate for foreign nationals",
+      "section": "Form 21, THO Rules 2014; Section 9(1A), THOA 2011 Amendment",
+      "needs_legal_verification": false
+    },
+    "financial_affidavit": {
+      "description": "Affidavit of no commercial dealing between donor and recipient",
+      "section": "Section 9(3), THOA 2011 Amendment",
+      "needs_legal_verification": true
+    },
+    "dna_test_match": {
+      "description": "DNA test establishing biological relationship",
+      "section": "Authorization Committee guidelines",
+      "needs_legal_verification": true
+    },
+    "police_verification": {
+      "description": "Police verification report for non-related / foreign donors",
+      "section": "Authorization Committee guidelines",
+      "needs_legal_verification": true
+    },
+    "identity_proof_submitted": {
+      "description": "Government-issued photo ID submitted for both donor and recipient",
+      "section": "General Rules",
+      "needs_legal_verification": true
+    },
+    "medical_report_submitted": {
+      "description": "Medical fitness / compatibility reports submitted",
+      "section": "General Rules",
+      "needs_legal_verification": true
+    }
+  },
+
+  "required_documents_by_relation": {
+    "SPOUSE": [
+      "has_form_2",
+      "has_form_4",
+      "identity_proof_submitted",
+      "medical_report_submitted"
+    ],
+    "PARENT_CHILD": [
+      "has_form_1",
+      "has_form_4",
+      "identity_proof_submitted",
+      "medical_report_submitted"
+    ],
+    "SIBLING": [
+      "has_form_1",
+      "has_form_4",
+      "identity_proof_submitted",
+      "medical_report_submitted"
+    ],
+    "GRANDPARENT_GRANDCHILD": [
+      "has_form_1",
+      "has_form_4",
+      "identity_proof_submitted",
+      "medical_report_submitted"
+    ],
+    "NON_RELATIVE": [
+      "has_form_3",
+      "has_form_4",
+      "has_form_11",
+      "has_financial_affidavit",
+      "police_verification",
+      "identity_proof_submitted",
+      "medical_report_submitted"
+    ],
+    "FOREIGN_NATIONAL": [
+      "has_form_4",
+      "has_form_11",
+      "has_form_21",
+      "has_financial_affidavit",
+      "police_verification",
+      "identity_proof_submitted",
+      "medical_report_submitted"
+    ]
+  },
+
+  "force_committee_review": [
+    "NON_RELATIVE",
+    "FOREIGN_NATIONAL"
+  ],
+
+  "donor_minimum_age": 18,
+  
+  "income_disparity_ratio_threshold": 10
+}
