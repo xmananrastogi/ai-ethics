@@ -1,7 +1,7 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { ArrowLeft, AlertTriangle, CheckCircle2, Info, FileText, Activity, Image, Upload, Download } from 'lucide-react';
-import { fetchCaseDetails, fetchAuditLogs, submitDecision, fetchDocuments, getDocumentFileUrl } from '../api';
+import { ArrowLeft, AlertTriangle, CheckCircle2, Info, FileText, Activity, Upload, Download } from 'lucide-react';
+import { fetchCaseDetails, fetchAuditLogs, submitDecision, fetchDocuments, getDocumentFileUrl, WS_BASE_URL } from '../api';
 import type { CaseDetail, AuditLog, CaseDocument } from '../api';
 
 export default function CaseDetailPage() {
@@ -37,7 +37,7 @@ export default function CaseDetailPage() {
       });
 
       // Connect WebSocket
-      const ws = new WebSocket(`ws://127.0.0.1:8000/cases/ws/${id}`);
+      const ws = new WebSocket(`${WS_BASE_URL}/cases/ws/${id}`);
       ws.onmessage = (event) => {
         const data = JSON.parse(event.data);
         if (data.event === 'screening_started') {
@@ -387,21 +387,44 @@ export default function CaseDetailPage() {
                       title={selectedDoc.original_filename}
                     />
                   );
-                } else if (selectedDoc.mime_type?.startsWith('image/')) {
+                if (selectedDoc.mime_type?.startsWith('image/')) {
                   return (
                     <div className="relative inline-block">
                         <img
                           src={fileUrl}
                           alt={selectedDoc.original_filename}
                           className="max-w-full max-h-full object-contain rounded shadow-2xl"
+                          ref={(el) => {
+                            // store rendered img ref for bbox scaling
+                            (window as any).__thoa_img_ref = el;
+                          }}
                         />
-                        {/* Mock Bounding Box representing OCR localization */}
-                        <div className="absolute border-2 border-yellow-400 bg-yellow-400/20 pointer-events-none flex items-start justify-start" style={{ top: '25%', left: '40%', width: '150px', height: '30px' }}>
-                            <span className="bg-yellow-400 text-black text-[10px] font-bold px-1 -mt-4">OCR: Aadhaar</span>
-                        </div>
-                        <div className="absolute border-2 border-yellow-400 bg-yellow-400/20 pointer-events-none flex items-start justify-start" style={{ top: '35%', left: '50%', width: '40px', height: '30px' }}>
-                            <span className="bg-yellow-400 text-black text-[10px] font-bold px-1 -mt-4">OCR: Age</span>
-                        </div>
+                        {/* Real OCR bounding boxes from Tesseract */}
+                        {caseDetail.bounding_boxes && Object.entries(caseDetail.bounding_boxes).map(([field, bbox]) => {
+                          if (!bbox) return null;
+                          const img = (window as any).__thoa_img_ref as HTMLImageElement | null;
+                          const iw = img?.naturalWidth || 1;
+                          const ih = img?.naturalHeight || 1;
+                          const rw = img?.clientWidth || 1;
+                          const rh = img?.clientHeight || 1;
+                          const scaleX = rw / iw;
+                          const scaleY = rh / ih;
+                          return (
+                            <div key={field}
+                              className="absolute border-2 border-yellow-400 bg-yellow-400/20 pointer-events-none"
+                              style={{
+                                left: `${bbox.x * 100}%`,
+                                top: `${bbox.y * 100}%`,
+                                width: `${bbox.w * 100}%`,
+                                height: `${bbox.h * 100}%`,
+                              }}
+                            >
+                              <span className="absolute -top-4 left-0 bg-yellow-400 text-black text-[9px] font-bold px-1 whitespace-nowrap">
+                                {field.replace('_', ' ')}
+                              </span>
+                            </div>
+                          );
+                        })}
                     </div>
                   );
                 } else {

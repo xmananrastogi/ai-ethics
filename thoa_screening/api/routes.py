@@ -98,13 +98,12 @@ async def upload_document(
     db.commit()
     db.refresh(doc)
     
-    # Broadcast to websocket
-    import asyncio
-    asyncio.create_task(manager.broadcast({
+    # Broadcast to all websocket subscribers for this case
+    await manager.broadcast({
         "event": "document_uploaded",
         "document_id": str(doc.id),
         "filename": doc.original_filename
-    }, str(case_id)))
+    }, str(case_id))
     
     return DocumentUploadResponse(
         document_id=str(doc.id),
@@ -143,16 +142,24 @@ async def trigger_screening(
         rule_results = db.query(RuleResult).filter(RuleResult.case_id == case_id).all()
         explanations_raw = ExplanationGenerator.generate(case, rule_results)
         
+        await manager.broadcast({
+            "event": "screening_complete",
+            "status": case.status.value,
+            "flags_count": len(screening_result["flags"])
+        }, str(case_id))
+        
         return ScreeningResultResponse(
             status=case.status.value,
             flags=screening_result["flags"],
             needs_legal_verification=screening_result["needs_legal_verification"],
-            explanations=explanations_raw
+            explanations=explanations_raw,
+            bounding_boxes=screening_result.get("bounding_boxes", {})
         )
     except ScreeningError as e:
         # If it fails, revert status
         case.status = CaseStatus.REJECTED
         db.commit()
+        await manager.broadcast({"event": "screening_error", "message": str(e)}, str(case_id))
         raise HTTPException(status_code=500, detail=str(e))
         
 @router.get("/{case_id}/screening-result", response_model=ScreeningResultResponse, responses={404: {"model": ErrorResponse}})

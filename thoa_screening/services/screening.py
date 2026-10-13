@@ -70,6 +70,7 @@ def screen_case(case_id: uuid.UUID | str, session: Session) -> Dict[str, Any]:
             raise ScreeningError(f"Case {case_id} is missing Donor or Recipient.")
             
         # 2. Extract Data via OCR (best-effort: invalid files don't abort screening)
+        all_bounding_boxes: dict = {}
         for doc in case.documents:
             # Check if this document already has extracted data
             if not doc.extracted_data and doc.file_path:
@@ -79,6 +80,10 @@ def screen_case(case_id: uuid.UUID | str, session: Session) -> Dict[str, Any]:
                 except Exception as ocr_err:
                     logger.warning(f"OCR failed for document {doc.id}: {ocr_err}. Skipping extraction.")
                     continue
+                
+                # Aggregate bounding boxes from this document
+                if ocr_result.get("bounding_boxes"):
+                    all_bounding_boxes.update(ocr_result["bounding_boxes"])
                 
                 # Persist ExtractedData
                 for field_name, value in ocr_result.get("extracted_data", {}).items():
@@ -112,7 +117,7 @@ def screen_case(case_id: uuid.UUID | str, session: Session) -> Dict[str, Any]:
             police_verification="POLICE_VERIFICATION" in doc_types,
             embassy_noc="FORM_21" in doc_types, # Assuming Form 21 implies NOC
             medical_fitness="MEDICAL_REPORT" in doc_types,
-            identity_proof="IDENTITY_PROOF" in doc_types
+            identity_proof_submitted="IDENTITY_PROOF" in doc_types
         )
         
         donor_profile = DonorProfile(
@@ -194,7 +199,8 @@ def screen_case(case_id: uuid.UUID | str, session: Session) -> Dict[str, Any]:
         return {
             "status": case.status.value,
             "flags": flags,
-            "needs_legal_verification": any(r.get("needs_legal_verification") for r in rule_results)
+            "needs_legal_verification": any(r.get("needs_legal_verification") for r in rule_results),
+            "bounding_boxes": all_bounding_boxes
         }
         
     except Exception as e:

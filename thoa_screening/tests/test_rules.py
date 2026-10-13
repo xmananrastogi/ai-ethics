@@ -137,8 +137,13 @@ def test_engine_non_relative_check_pass(engine, base_donor, base_recipient):
     
     # Non-relatives always trigger REL-04 WARNING (mandates committee review)
     assert status == CaseStatus.ANOMALIES_DETECTED
+    # REL-02 (Near Relative Documentation) is correctly SKIPPED by the DAG for non-relatives.
+    # Only REL-04 (Non-Relative Requires Authorization) and REL-05 apply here.
     rel_02 = next(r for r in results if r["rule_code"] == "REL-02")
-    assert rel_02["result"] == RuleOutcome.PASS
+    assert rel_02["result"] == RuleOutcome.SKIPPED
+    assert "DAG" in rel_02["message"]
+    rel_04 = next(r for r in results if r["rule_code"] == "REL-04")
+    assert rel_04["result"] == RuleOutcome.WARNING
 
 def test_engine_non_relative_check_fail(engine, base_donor, base_recipient):
     with pytest.raises(ValidationError) as exc:

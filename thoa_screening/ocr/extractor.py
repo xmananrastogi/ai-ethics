@@ -19,33 +19,38 @@ def get_nlp():
         _nlp = spacy.load("en_core_web_sm")
     return _nlp
 
-def extract_text_and_confidence(image: Image.Image) -> tuple[str, float]:
+def extract_text_and_confidence(image: Image.Image) -> tuple[str, float, list[dict]]:
     """
     Extract text using Tesseract and compute an average confidence score.
-    Returns (extracted_text, average_confidence)
+    Also returns per-word bounding box data for real highlight positioning.
+    Returns (extracted_text, average_confidence, word_data)
+    where word_data is a list of dicts: {text, left, top, width, height, conf}
     """
-    # Get detailed data from tesseract
-    # PSM 3 is default (fully automatic page segmentation)
     data = pytesseract.image_to_data(image, output_type=pytesseract.Output.DICT)
     
     text_blocks = []
     confidences = []
+    word_data = []
     
     for i in range(len(data['text'])):
         text = data['text'][i].strip()
         conf = float(data['conf'][i])
-        # conf is -1 if it's a block/paragraph boundary rather than a word
         if conf > -1 and text:
             text_blocks.append(text)
             confidences.append(conf)
+            word_data.append({
+                "text": text,
+                "left": int(data['left'][i]),
+                "top": int(data['top'][i]),
+                "width": int(data['width'][i]),
+                "height": int(data['height'][i]),
+                "conf": conf
+            })
             
     full_text = " ".join(text_blocks)
     avg_conf = sum(confidences) / len(confidences) if confidences else 0.0
     
-    # Normalize OCR artifacts
-    # (Tesseract often confuses O and 0 depending on context, we handle that in specific extractors)
-    
-    return full_text, avg_conf
+    return full_text, avg_conf, word_data
 
 def _extract_aadhaar(text: str) -> tuple[str | None, float]:
     # Look for 12 digits, possibly separated by spaces or hyphens

@@ -20,6 +20,14 @@ class ErrorResponse(BaseModel):
     error: str
     details: Optional[List[ErrorDetail]] = None
 
+class BoundingBox(BaseModel):
+    """Normalised bounding box (0.0–1.0) for a field located on a scanned document."""
+    x: float
+    y: float
+    w: float
+    h: float
+    page: int = 1
+
 class ExplanationModel(BaseModel):
     """Human-readable explanation of a flagged rule."""
     rule_code: str
@@ -45,6 +53,7 @@ class ScreeningResultResponse(BaseModel):
     flags: List[str]
     needs_legal_verification: bool
     explanations: List[ExplanationModel] = Field(default_factory=list)
+    bounding_boxes: Optional[dict] = Field(default_factory=dict)
 
 class PersonCreate(BaseModel):
     full_name: str
@@ -86,6 +95,7 @@ class CaseDetail(BaseModel):
     recipient: PersonDetail
     flags: List[str]
     explanations: List[ExplanationModel]
+    bounding_boxes: Optional[dict] = Field(default_factory=dict)
 
 class DecisionSubmit(BaseModel):
     decision: str

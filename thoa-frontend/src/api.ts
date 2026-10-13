@@ -1,4 +1,5 @@
-const API_BASE_URL = 'http://127.0.0.1:8000';
+const API_BASE_URL = import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:8000';
+export const WS_BASE_URL = (import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:8000').replace('http', 'ws');
 
 export interface CaseSummary {
   id: string;
@@ -19,6 +20,14 @@ export interface RuleResult {
   needs_legal_verification: boolean;
 }
 
+export interface BoundingBox {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  page: number;
+}
+
 export interface CaseDetail {
   id: string;
   case_number: string;
@@ -31,6 +40,7 @@ export interface CaseDetail {
   recipient: { full_name: string; age: number };
   flags: string[];
   explanations: RuleResult[];
+  bounding_boxes?: Record<string, BoundingBox | null>;
 }
 
 export interface AuditLog {
