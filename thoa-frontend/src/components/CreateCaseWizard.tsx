@@ -1,6 +1,6 @@
-import React, { useState, useRef } from 'react';
+import { useState, useRef, type ChangeEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Upload, FileText, CheckCircle, AlertCircle, ArrowRight, ArrowLeft, X, Plus } from 'lucide-react';
+import { Upload, FileText, CheckCircle, AlertCircle, ArrowRight, X, Plus } from 'lucide-react';
 import { createCase, uploadDocument, triggerScreening } from '../api';
 import type { CaseCreatePayload } from '../api';
 
@@ -98,7 +98,7 @@ export default function CreateCaseWizard() {
     }
   };
 
-  const handleAddFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleAddFile = (e: ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files) return;
     const newFiles = Array.from(e.target.files).map((f) => ({
       file: f,

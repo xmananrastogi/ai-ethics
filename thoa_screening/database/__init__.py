@@ -56,18 +56,16 @@ def get_engine(database_url: str | None = None, *, echo: bool = False) -> Engine
     Raises:
         ValueError: If no database URL is available.
     """
-    url = database_url or os.environ.get("THOA_DATABASE_URL")
-    if not url:
-        raise ValueError(
-            "Database URL not provided.  Set the THOA_DATABASE_URL "
-            "environment variable or pass `database_url` explicitly."
-        )
+    url = database_url or os.environ.get("THOA_DATABASE_URL") or "sqlite:///thoa.db"
     kwargs = {"echo": echo, "pool_pre_ping": True}
     if not url.startswith("sqlite"):
         kwargs["pool_size"] = 5
         kwargs["max_overflow"] = 10
     else:
-        kwargs["connect_args"] = {"check_same_thread": False}
+        connect_args: dict = {"check_same_thread": False}
+        if "uri=true" in url.lower() or "file:" in url:
+            connect_args["uri"] = True
+        kwargs["connect_args"] = connect_args
 
     return create_engine(url, **kwargs)
 

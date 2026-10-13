@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { fetchCases } from '../api';
 import type { CaseSummary } from '../api';
 import { BarChart3, TrendingUp, PieChart, Calendar } from 'lucide-react';

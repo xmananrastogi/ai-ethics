@@ -1,4 +1,3 @@
-import React from 'react';
 import { Shield, Database, Eye, Lock, Server, FileCheck } from 'lucide-react';
 
 export default function SettingsPage() {

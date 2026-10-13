@@ -158,3 +158,25 @@ export async function triggerScreening(caseId: string): Promise<{ status: string
   }
   return await res.json();
 }
+
+export async function submitCorrection(
+  caseId: string,
+  fieldName: string,
+  originalText: string,
+  correctedText: string
+): Promise<void> {
+  const res = await fetch(`${API_BASE_URL}/cases/${caseId}/corrections`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      field_name: fieldName,
+      original_text: originalText,
+      corrected_text: correctedText
+    })
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || "Failed to submit correction");
+  }
+}
+

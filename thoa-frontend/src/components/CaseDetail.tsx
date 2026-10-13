@@ -1,7 +1,7 @@
-import React, { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { ArrowLeft, AlertTriangle, CheckCircle2, Info, FileText, Activity, Upload, Download } from 'lucide-react';
-import { fetchCaseDetails, fetchAuditLogs, submitDecision, fetchDocuments, getDocumentFileUrl, WS_BASE_URL } from '../api';
+import { fetchCaseDetails, fetchAuditLogs, submitDecision, fetchDocuments, getDocumentFileUrl, submitCorrection, WS_BASE_URL } from '../api';
 import type { CaseDetail, AuditLog, CaseDocument } from '../api';
 
 export default function CaseDetailPage() {
@@ -52,20 +52,17 @@ export default function CaseDetailPage() {
   }, [id]);
 
   const handleHITLSubmit = async (field: string, originalValue: string) => {
+    if (!id) return;
     try {
-      await fetch(`http://127.0.0.1:8000/cases/${id}/corrections`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ field_name: field, original_text: originalValue, corrected_text: editValue })
-      });
+      await submitCorrection(id, field, originalValue, editValue);
       alert('Correction saved to Training Data table. The AI will learn from this!');
       setEditingField(null);
     } catch (e) {
-      console.error("Failed to submit correction");
+      console.error("Failed to submit correction", e);
     }
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     if (!id || !decision) return;
     
@@ -239,7 +236,7 @@ export default function CaseDetailPage() {
               <form onSubmit={handleSubmit} className="space-y-4">
                 
                 <div className="flex space-x-3">
-                  <label className={`flex-1 border rounded-lg p-3 cursor-pointer transition-all ${decision === 'APPROVED' ? 'bg-emerald-50 border-emerald-500 ring-1 ring-emerald-500' : 'hover:bg-slate-50 border-slate-200'}`}>
+                  <label className={`flex-1 border rounded-lg p-3 cursor-pointer transition-all ${decision === 'APPROVED' || decision === 'OVERRIDE' ? 'bg-emerald-50 border-emerald-500 ring-1 ring-emerald-500' : 'hover:bg-slate-50 border-slate-200'}`}>
                     <input type="radio" name="decision" value="APPROVED" className="sr-only" onChange={(e) => setDecision(e.target.value)} />
                     <span className="block text-sm font-medium text-center text-slate-900">Approve</span>
                   </label>
@@ -253,10 +250,15 @@ export default function CaseDetailPage() {
                   </label>
                 </div>
 
-                {hasCriticalFlags && decision === 'APPROVED' && (
+                {hasCriticalFlags && (decision === 'APPROVED' || decision === 'OVERRIDE') && (
                   <div className="mt-4 p-3 bg-rose-50 border border-rose-200 rounded-lg">
                     <label className="flex items-center space-x-2">
-                      <input type="checkbox" checked={decision === 'OVERRIDE'} onChange={(e) => e.target.checked ? setDecision('OVERRIDE') : setDecision('APPROVED')} className="rounded text-rose-600 focus:ring-rose-500" />
+                      <input 
+                        type="checkbox" 
+                        checked={decision === 'OVERRIDE'} 
+                        onChange={(e) => setDecision(e.target.checked ? 'OVERRIDE' : 'APPROVED')} 
+                        className="rounded text-rose-600 focus:ring-rose-500" 
+                      />
                       <span className="text-sm font-medium text-rose-800">I am overriding a critical rule flag</span>
                     </label>
                   </div>
@@ -387,6 +389,7 @@ export default function CaseDetailPage() {
                       title={selectedDoc.original_filename}
                     />
                   );
+                }
                 if (selectedDoc.mime_type?.startsWith('image/')) {
                   return (
                     <div className="relative inline-block">
@@ -394,21 +397,10 @@ export default function CaseDetailPage() {
                           src={fileUrl}
                           alt={selectedDoc.original_filename}
                           className="max-w-full max-h-full object-contain rounded shadow-2xl"
-                          ref={(el) => {
-                            // store rendered img ref for bbox scaling
-                            (window as any).__thoa_img_ref = el;
-                          }}
                         />
                         {/* Real OCR bounding boxes from Tesseract */}
                         {caseDetail.bounding_boxes && Object.entries(caseDetail.bounding_boxes).map(([field, bbox]) => {
                           if (!bbox) return null;
-                          const img = (window as any).__thoa_img_ref as HTMLImageElement | null;
-                          const iw = img?.naturalWidth || 1;
-                          const ih = img?.naturalHeight || 1;
-                          const rw = img?.clientWidth || 1;
-                          const rh = img?.clientHeight || 1;
-                          const scaleX = rw / iw;
-                          const scaleY = rh / ih;
                           return (
                             <div key={field}
                               className="absolute border-2 border-yellow-400 bg-yellow-400/20 pointer-events-none"

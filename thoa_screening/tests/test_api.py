@@ -18,11 +18,13 @@ from thoa_screening.database.models import (
 )
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import StaticPool
 
-# Setup test database with shared cache for memory
+# Setup test database with shared in-memory StaticPool
 engine = create_engine(
-    "sqlite:///file:memdb1?mode=memory&cache=shared",
-    connect_args={"check_same_thread": False}
+    "sqlite://",
+    connect_args={"check_same_thread": False},
+    poolclass=StaticPool
 )
 Base.metadata.create_all(engine)
 TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)

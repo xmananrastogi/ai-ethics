@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Search, Filter, AlertCircle, CheckCircle, Clock, FileX, Plus } from 'lucide-react';
 import { fetchCases } from '../api';

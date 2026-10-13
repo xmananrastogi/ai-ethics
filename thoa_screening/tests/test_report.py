@@ -11,8 +11,10 @@ from thoa_screening.api.deps import get_db
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
+from sqlalchemy.pool import StaticPool
+
 # DB Setup
-engine = create_engine("sqlite:///file:memdb_rep?mode=memory&cache=shared", connect_args={"check_same_thread": False})
+engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
 from thoa_screening.database import Base
 Base.metadata.create_all(engine)
 TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
