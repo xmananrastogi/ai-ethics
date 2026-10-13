@@ -107,28 +107,49 @@ def _extract_dob(text: str) -> tuple[str | None, float]:
     return None, 0.0
 
 def _extract_name_address(text: str) -> tuple[str | None, float, str | None, float]:
-    # Use SpaCy to find PERSON (name) and GPE/LOC (address)
+    # 1. First attempt targeted regex for statutory form headers
+    name_patterns = [
+        r'(?:My full name \(proposed donor\) is|My full name is|Whereas I[,\s]+Shri/Smt/Ms\.?|Whereas I)\s*[\.:]*\s*([A-Z][a-zA-Z\s]{2,30}?)(?:[\.,\n]|\s+and\b|\s+aged\b|\s+S/o|\s+D/o|\s+W/o)',
+        r'(?:Name of (?:the )?(?:donor|recipient))\s*[:\-]\s*([A-Z][a-zA-Z\s]{2,30})',
+    ]
+    for pattern in name_patterns:
+        match = re.search(pattern, text, re.IGNORECASE)
+        if match:
+            candidate = match.group(1).strip()
+            # Clean punctuation/dots
+            candidate = re.sub(r'[^a-zA-Z\s]', '', candidate).strip()
+            if len(candidate) > 2 and candidate.lower() not in ("refer", "doctor", "dr"):
+                return candidate, 92.0, None, 0.0
+
+    # 2. Use SpaCy to find PERSON (name) and GPE/LOC (address)
     nlp = get_nlp()
     doc = nlp(text)
     
     names = []
     addresses = []
     
+    STOP_PERSONS = {
+        "refer", "rules", "rule", "form", "transplantation", "act",
+        "doctor", "medical", "practitioner", "notary", "public",
+        "delhi", "india", "hospital", "committee", "donor", "recipient",
+        "registered medical practitioner", "sections", "driving license",
+        "driving", "license", "voter", "passport", "ration", "consumer",
+        "card", "permanent", "account", "number", "aadhaar", "tel",
+        "signature", "photograph", "affix", "notary public", "state"
+    }
+    
     for ent in doc.ents:
         if ent.label_ == "PERSON":
-            # Clean up stray characters
             clean_name = re.sub(r'[^a-zA-Z\s\.]', '', ent.text).strip()
-            if len(clean_name) > 2:
+            lower_name = clean_name.lower()
+            if len(clean_name) > 2 and lower_name not in STOP_PERSONS and not any(term in lower_name for term in ["license", "card", "rules", "notary", "signature"]):
                 names.append(clean_name)
         elif ent.label_ in ("GPE", "LOC", "FAC"):
             addresses.append(ent.text)
             
-    # Naive assumption: first PERSON is the name, all GPEs form the address
     name = names[0] if names else None
     name_conf = 85.0 if name else 0.0
     
-    # Address is usually harder, we combine GPEs or just regex for common keywords
-    # For a real system we'd use a more robust address regex or BERT model
     address = ", ".join(addresses) if addresses else None
     addr_conf = 70.0 if address else 0.0
     

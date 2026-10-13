@@ -27,11 +27,13 @@ class ScreeningError(Exception):
     """Custom exception raised during the screening workflow."""
     pass
 
-# Mock decryption functions until the KMS layer is built
 def _mock_decrypt(enc_value: bytes | None) -> str:
     if not enc_value:
         return "123456789012"  # fallback mock
-    return enc_value.decode('utf-8')
+    val = enc_value.decode('utf-8', errors='ignore')
+    if val.startswith("enc_"):
+        val = val[4:]
+    return val
 
 def screen_case(case_id: uuid.UUID | str, session: Session) -> Dict[str, Any]:
     """
@@ -115,35 +117,35 @@ def screen_case(case_id: uuid.UUID | str, session: Session) -> Dict[str, Any]:
             has_financial_affidavit="FINANCIAL_AFFIDAVIT" in doc_types,
             dna_test_match="DNA_REPORT" in doc_types,
             police_verification="POLICE_VERIFICATION" in doc_types,
-            embassy_noc="FORM_21" in doc_types, # Assuming Form 21 implies NOC
-            medical_fitness="MEDICAL_REPORT" in doc_types,
-            identity_proof_submitted="IDENTITY_PROOF" in doc_types
-        )
-        
-        donor_profile = DonorProfile(
-            full_name=case.donor.full_name,
-            age=case.donor.age,
-            dob=case.donor.date_of_birth.date() if case.donor.date_of_birth else None,
-            aadhaar_number=_mock_decrypt(case.donor.aadhaar_number_enc),
-            pan_number=_mock_decrypt(case.donor.pan_number_enc) if case.donor.pan_number_enc else None,
-            nationality=case.donor.nationality,
-            monthly_income=case.donor.monthly_income or 0,
-            address=case.donor.address
-        )
-        
-        recipient_profile = RecipientProfile(
-            full_name=case.recipient.full_name,
-            age=case.recipient.age,
-            dob=case.recipient.date_of_birth.date() if case.recipient.date_of_birth else None,
-            aadhaar_number=_mock_decrypt(case.recipient.aadhaar_number_enc),
-            pan_number=_mock_decrypt(case.recipient.pan_number_enc) if case.recipient.pan_number_enc else None,
-            nationality=case.recipient.nationality,
-            monthly_income=case.recipient.monthly_income or 0,
-            address=case.recipient.address
+            embassy_noc="FORM_21" in doc_types,
+            medical_report_submitted=("MEDICAL_REPORT" in doc_types or "FORM_4" in doc_types),
+            identity_proof_submitted=("IDENTITY_PROOF" in doc_types or "FORM_1" in doc_types or "FORM_2" in doc_types or "FORM_3" in doc_types or "FORM_11" in doc_types)
         )
         
         from pydantic import ValidationError
         try:
+            donor_profile = DonorProfile(
+                full_name=case.donor.full_name,
+                age=case.donor.age,
+                dob=case.donor.date_of_birth.date() if case.donor.date_of_birth else None,
+                aadhaar_number=_mock_decrypt(case.donor.aadhaar_number_enc),
+                pan_number=_mock_decrypt(case.donor.pan_number_enc) if case.donor.pan_number_enc else None,
+                nationality=case.donor.nationality,
+                monthly_income=case.donor.monthly_income or 0,
+                address=case.donor.address
+            )
+            
+            recipient_profile = RecipientProfile(
+                full_name=case.recipient.full_name,
+                age=case.recipient.age,
+                dob=case.recipient.date_of_birth.date() if case.recipient.date_of_birth else None,
+                aadhaar_number=_mock_decrypt(case.recipient.aadhaar_number_enc),
+                pan_number=_mock_decrypt(case.recipient.pan_number_enc) if case.recipient.pan_number_enc else None,
+                nationality=case.recipient.nationality,
+                monthly_income=case.recipient.monthly_income or 0,
+                address=case.recipient.address
+            )
+
             pydantic_case = TransplantCase(
                 relation_type=case.relation_type.value,
                 donor=donor_profile,
@@ -161,13 +163,15 @@ def screen_case(case_id: uuid.UUID | str, session: Session) -> Dict[str, Any]:
             # Extract error messages from Pydantic to store as RuleResult
             rule_results = []
             for error in ve.errors():
+                field_loc = ".".join(str(l) for l in error.get("loc", []))
+                rule_code = "ID-01" if "age" in field_loc else "SCHEMA_VALIDATION_ERROR"
                 rule_results.append({
-                    "rule_code": "SCHEMA_VALIDATION_ERROR",
+                    "rule_code": rule_code,
                     "rule_description": "Initial data validation failed",
                     "result": RuleOutcome.FAIL,
                     "severity": "ERROR",
                     "message": error.get("msg", str(error)),
-                    "legal_reference": None,
+                    "legal_reference": "Section 3, THOA 1994" if rule_code == "ID-01" else None,
                     "needs_legal_verification": False
                 })
 
@@ -189,7 +193,17 @@ def screen_case(case_id: uuid.UUID | str, session: Session) -> Dict[str, Any]:
             session.add(db_result)
 
         # Update Case Status (Advisory Only mapping)
-        case.status = CaseStatus(status_enum.value) if hasattr(status_enum, 'value') else status_enum
+        status_val = status_enum.value if hasattr(status_enum, 'value') else str(status_enum)
+        if status_val in ("ANOMALIES_DETECTED", "COMMITTEE_REVIEW"):
+            case.status = CaseStatus.COMMITTEE_REVIEW
+        elif status_val in ("APPROVED", "AUTO_APPROVE"):
+            case.status = CaseStatus.AUTO_APPROVE
+        elif status_val == "REJECTED":
+            case.status = CaseStatus.REJECTED
+        elif status_val == "NEEDS_INFO":
+            case.status = CaseStatus.NEEDS_INFO
+        else:
+            case.status = CaseStatus.UNDER_REVIEW
 
         # 6. Commit and Return
         session.commit()
