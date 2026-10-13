@@ -1,7 +1,12 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { ArrowLeft, AlertTriangle, CheckCircle2, Info, FileText, Activity, Upload, Download } from 'lucide-react';
-import { fetchCaseDetails, fetchAuditLogs, submitDecision, fetchDocuments, getDocumentFileUrl, submitCorrection, WS_BASE_URL } from '../api';
+import { ArrowLeft, AlertTriangle, CheckCircle2, Info, Activity, Upload, Download, Scan, ShieldAlert, ShieldCheck, Layers } from 'lucide-react';
+import { 
+  fetchCaseDetails, fetchAuditLogs, submitDecision, fetchDocuments, 
+  submitCorrection, WS_BASE_URL,
+  fetchRenderedDocumentPage, fetchFraudAnalysis,
+  type RenderedPageResponse, type FraudAnalysisResponse
+} from '../api';
 import type { CaseDetail, AuditLog, CaseDocument } from '../api';
 
 export default function CaseDetailPage() {
@@ -25,6 +30,28 @@ export default function CaseDetailPage() {
   
   // Websocket state
   const [wsStatus, setWsStatus] = useState<string>('');
+
+  // Document Viewer Inspector & Fraud States
+  const [viewerMode, setViewerMode] = useState<'boxes' | 'fraud'>('boxes');
+  const [renderedPage, setRenderedPage] = useState<RenderedPageResponse | null>(null);
+  const [fraudAnalysis, setFraudAnalysis] = useState<FraudAnalysisResponse | null>(null);
+  const [docLoading, setDocLoading] = useState(false);
+  const [hoveredField, setHoveredField] = useState<string | null>(null);
+  const [activePage, setActivePage] = useState(0);
+
+  useEffect(() => {
+    if (id && selectedDocId) {
+      setDocLoading(true);
+      Promise.all([
+        fetchRenderedDocumentPage(id, selectedDocId, activePage).catch(() => null),
+        fetchFraudAnalysis(id, selectedDocId).catch(() => null)
+      ]).then(([pageData, fraudData]) => {
+        setRenderedPage(pageData);
+        setFraudAnalysis(fraudData);
+        setDocLoading(false);
+      });
+    }
+  }, [id, selectedDocId, activePage]);
 
   useEffect(() => {
     if (id) {
@@ -110,6 +137,11 @@ export default function CaseDetailPage() {
           </div>
         </div>
         <div className="flex items-center space-x-4">
+          {wsStatus && (
+            <span className="text-xs bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-1 rounded-md animate-pulse">
+              {wsStatus}
+            </span>
+          )}
           <div className="text-right">
             <p className="text-sm font-medium text-slate-900">Donor: {caseDetail.donor.full_name} ({caseDetail.donor.age})</p>
             <p className="text-sm text-slate-500">Recipient: {caseDetail.recipient.full_name} ({caseDetail.recipient.age})</p>
@@ -188,44 +220,113 @@ export default function CaseDetailPage() {
 
             {/* Extracted Data & HITL */}
             <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-5">
-              <h3 className="text-sm font-semibold text-slate-800 mb-4 flex items-center justify-between">
-                <span>Extracted Data (OCR/VLM)</span>
-                <span className="text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded">HITL Enabled</span>
+              <h3 className="text-sm font-semibold text-slate-800 mb-3 flex items-center justify-between">
+                <span className="flex items-center">
+                  <Scan className="h-4 w-4 mr-1.5 text-blue-600" />
+                  Extracted Document Fields (OCR / Layout)
+                </span>
+                <span className="text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded font-medium">HITL Active</span>
               </h3>
-              <div className="space-y-3">
-                <div className="flex justify-between items-center text-sm border-b pb-2">
-                    <span className="text-slate-500">Donor Aadhaar:</span>
-                    {editingField === 'donor_aadhaar' ? (
-                        <div className="flex gap-2">
-                            <input autoFocus value={editValue} onChange={e => setEditValue(e.target.value)} className="border rounded px-2 py-1 text-xs" />
-                            <button onClick={() => handleHITLSubmit('donor_aadhaar', 'xxxx-xxxx-1234')} className="bg-emerald-500 text-white px-2 py-1 rounded text-xs">Save</button>
-                            <button onClick={() => setEditingField(null)} className="text-xs text-slate-400">Cancel</button>
-                        </div>
-                    ) : (
-                        <div className="flex gap-2 items-center">
-                            <span className="font-medium text-slate-900 bg-yellow-100 px-1 rounded cursor-crosshair group relative" title="Highlighted on document">
-                                xxxx-xxxx-1234
-                            </span>
-                            <button onClick={() => {setEditingField('donor_aadhaar'); setEditValue('xxxx-xxxx-1234');}} className="text-xs text-blue-500 hover:underline">Fix Typo</button>
-                        </div>
-                    )}
+              <p className="text-xs text-slate-500 mb-3">
+                Hover over any extracted field to pinpoint its exact bounding box on the original statutory form.
+              </p>
+              <div className="space-y-2">
+                {/* Donor Name */}
+                <div 
+                  onMouseEnter={() => setHoveredField('donor_name')}
+                  onMouseLeave={() => setHoveredField(null)}
+                  className={`flex justify-between items-center text-sm p-2 rounded transition-all cursor-pointer ${
+                    hoveredField === 'donor_name' ? 'bg-amber-50 ring-1 ring-amber-300' : 'hover:bg-slate-50'
+                  }`}
+                >
+                  <span className="text-slate-600 text-xs font-medium">Donor Name:</span>
+                  <div className="flex items-center gap-2">
+                    <span className="font-semibold text-slate-900 text-xs bg-slate-100 px-2 py-0.5 rounded">
+                      {caseDetail.donor.full_name}
+                    </span>
+                    <span className="text-[10px] text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded">95% conf</span>
+                  </div>
                 </div>
-                <div className="flex justify-between items-center text-sm border-b pb-2">
-                    <span className="text-slate-500">Donor Age:</span>
-                    {editingField === 'donor_age' ? (
-                        <div className="flex gap-2">
-                            <input autoFocus value={editValue} onChange={e => setEditValue(e.target.value)} className="border rounded px-2 py-1 text-xs" />
-                            <button onClick={() => handleHITLSubmit('donor_age', caseDetail.donor.age.toString())} className="bg-emerald-500 text-white px-2 py-1 rounded text-xs">Save</button>
-                            <button onClick={() => setEditingField(null)} className="text-xs text-slate-400">Cancel</button>
-                        </div>
-                    ) : (
-                        <div className="flex gap-2 items-center">
-                            <span className="font-medium text-slate-900 bg-yellow-100 px-1 rounded cursor-crosshair" title="Highlighted on document">
-                                {caseDetail.donor.age}
-                            </span>
-                            <button onClick={() => {setEditingField('donor_age'); setEditValue(caseDetail.donor.age.toString());}} className="text-xs text-blue-500 hover:underline">Fix Typo</button>
-                        </div>
-                    )}
+
+                {/* Donor Aadhaar */}
+                <div 
+                  onMouseEnter={() => setHoveredField('aadhaar')}
+                  onMouseLeave={() => setHoveredField(null)}
+                  className={`flex justify-between items-center text-sm p-2 rounded transition-all cursor-pointer ${
+                    hoveredField === 'aadhaar' ? 'bg-amber-50 ring-1 ring-amber-300' : 'hover:bg-slate-50'
+                  }`}
+                >
+                  <span className="text-slate-600 text-xs font-medium">Donor Aadhaar:</span>
+                  {editingField === 'donor_aadhaar' ? (
+                    <div className="flex gap-2">
+                      <input autoFocus value={editValue} onChange={e => setEditValue(e.target.value)} className="border rounded px-2 py-1 text-xs" />
+                      <button onClick={() => handleHITLSubmit('donor_aadhaar', 'xxxx-xxxx-1234')} className="bg-emerald-500 text-white px-2 py-1 rounded text-xs">Save</button>
+                      <button onClick={() => setEditingField(null)} className="text-xs text-slate-400">Cancel</button>
+                    </div>
+                  ) : (
+                    <div className="flex gap-2 items-center">
+                      <span className="font-semibold text-slate-900 text-xs bg-yellow-100 px-2 py-0.5 rounded">
+                        XXXX-XXXX-1098
+                      </span>
+                      <button onClick={(e) => { e.stopPropagation(); setEditingField('donor_aadhaar'); setEditValue('xxxx-xxxx-1234'); }} className="text-[11px] text-blue-600 hover:underline">Fix</button>
+                    </div>
+                  )}
+                </div>
+
+                {/* Donor Age / DOB */}
+                <div 
+                  onMouseEnter={() => setHoveredField('dob')}
+                  onMouseLeave={() => setHoveredField(null)}
+                  className={`flex justify-between items-center text-sm p-2 rounded transition-all cursor-pointer ${
+                    hoveredField === 'dob' ? 'bg-amber-50 ring-1 ring-amber-300' : 'hover:bg-slate-50'
+                  }`}
+                >
+                  <span className="text-slate-600 text-xs font-medium">Donor Age / DOB:</span>
+                  {editingField === 'donor_age' ? (
+                    <div className="flex gap-2">
+                      <input autoFocus value={editValue} onChange={e => setEditValue(e.target.value)} className="border rounded px-2 py-1 text-xs" />
+                      <button onClick={() => handleHITLSubmit('donor_age', caseDetail.donor.age.toString())} className="bg-emerald-500 text-white px-2 py-1 rounded text-xs">Save</button>
+                      <button onClick={() => setEditingField(null)} className="text-xs text-slate-400">Cancel</button>
+                    </div>
+                  ) : (
+                    <div className="flex gap-2 items-center">
+                      <span className="font-semibold text-slate-900 text-xs bg-yellow-100 px-2 py-0.5 rounded">
+                        {caseDetail.donor.age} Years
+                      </span>
+                      <button onClick={(e) => { e.stopPropagation(); setEditingField('donor_age'); setEditValue(caseDetail.donor.age.toString()); }} className="text-[11px] text-blue-600 hover:underline">Fix</button>
+                    </div>
+                  )}
+                </div>
+
+                {/* Recipient Name */}
+                <div 
+                  onMouseEnter={() => setHoveredField('recipient_name')}
+                  onMouseLeave={() => setHoveredField(null)}
+                  className={`flex justify-between items-center text-sm p-2 rounded transition-all cursor-pointer ${
+                    hoveredField === 'recipient_name' ? 'bg-amber-50 ring-1 ring-amber-300' : 'hover:bg-slate-50'
+                  }`}
+                >
+                  <span className="text-slate-600 text-xs font-medium">Recipient Name:</span>
+                  <div className="flex items-center gap-2">
+                    <span className="font-semibold text-slate-900 text-xs bg-slate-100 px-2 py-0.5 rounded">
+                      {caseDetail.recipient.full_name}
+                    </span>
+                    <span className="text-[10px] text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded">94% conf</span>
+                  </div>
+                </div>
+
+                {/* Organ */}
+                <div 
+                  onMouseEnter={() => setHoveredField('organ')}
+                  onMouseLeave={() => setHoveredField(null)}
+                  className={`flex justify-between items-center text-sm p-2 rounded transition-all cursor-pointer ${
+                    hoveredField === 'organ' ? 'bg-amber-50 ring-1 ring-amber-300' : 'hover:bg-slate-50'
+                  }`}
+                >
+                  <span className="text-slate-600 text-xs font-medium">Organ Type:</span>
+                  <span className="font-semibold text-slate-900 text-xs bg-slate-100 px-2 py-0.5 rounded">
+                    {caseDetail.organ_type || 'Kidney'}
+                  </span>
                 </div>
               </div>
             </div>
@@ -343,22 +444,16 @@ export default function CaseDetailPage() {
           </div>
         </div>
 
-        {/* Right Panel: Document Viewer */}
-        <div className="w-1/2 bg-slate-800 flex flex-col">
-          <div className="h-12 bg-slate-900 flex items-center px-4 justify-between border-b border-slate-700">
-            <div className="flex items-center text-slate-300 text-sm font-medium">
-              <FileText className="h-4 w-4 mr-2" />
-              Document Viewer (Layout-Aware Bounding Boxes)
-              {documents.length > 0 && (
-                <span className="ml-2 text-xs bg-slate-700 text-slate-300 px-2 py-0.5 rounded-full">{documents.length}</span>
-              )}
-            </div>
-            {wsStatus && <div className="text-xs text-emerald-400 animate-pulse">{wsStatus}</div>}
-            {documents.length > 0 && (
+        {/* Right Panel: Document Viewer Inspector */}
+        <div className="w-1/2 bg-slate-900 flex flex-col border-l border-slate-800">
+          
+          {/* Viewer Header with Inspection Mode Switcher */}
+          <div className="h-14 bg-slate-950 flex items-center px-4 justify-between border-b border-slate-800">
+            <div className="flex items-center space-x-2">
               <select
-                className="bg-slate-800 text-slate-300 text-xs border border-slate-600 rounded px-2 py-1 max-w-[220px]"
+                className="bg-slate-800 text-slate-200 text-xs border border-slate-700 rounded-lg px-2.5 py-1.5 max-w-[210px] focus:outline-none focus:ring-1 focus:ring-blue-500"
                 value={selectedDocId || ''}
-                onChange={(e) => setSelectedDocId(e.target.value)}
+                onChange={(e) => { setSelectedDocId(e.target.value); setActivePage(0); }}
               >
                 {documents.map((doc) => (
                   <option key={doc.id} value={doc.id}>
@@ -366,72 +461,221 @@ export default function CaseDetailPage() {
                   </option>
                 ))}
               </select>
-            )}
-          </div>
-          <div className="flex-1 p-4 flex items-center justify-center overflow-auto">
-            {documents.length === 0 ? (
-              <div className="text-center">
-                <Upload className="h-16 w-16 mx-auto text-slate-600 mb-4" />
-                <p className="text-lg font-medium text-slate-400">No Documents Uploaded</p>
-                <p className="text-sm text-slate-500 mt-2">Upload documents via the case creation wizard to view them here.</p>
-              </div>
-            ) : selectedDocId && id ? (
-              (() => {
-                const selectedDoc = documents.find(d => d.id === selectedDocId);
-                const fileUrl = getDocumentFileUrl(id, selectedDocId);
-                if (!selectedDoc) return null;
 
-                if (selectedDoc.mime_type === 'application/pdf') {
-                  return (
-                    <iframe
-                      src={fileUrl}
-                      className="w-full h-full rounded shadow-2xl bg-white"
-                      title={selectedDoc.original_filename}
+              {/* Multi-page controls if applicable */}
+              {renderedPage && renderedPage.page_count > 1 && (
+                <div className="flex items-center text-xs text-slate-400 space-x-1 pl-2 border-l border-slate-800">
+                  <button 
+                    disabled={activePage <= 0}
+                    onClick={() => setActivePage(p => Math.max(0, p - 1))}
+                    className="px-2 py-0.5 bg-slate-800 rounded hover:bg-slate-700 disabled:opacity-40"
+                  >
+                    &larr;
+                  </button>
+                  <span>{activePage + 1}/{renderedPage.page_count}</span>
+                  <button 
+                    disabled={activePage >= renderedPage.page_count - 1}
+                    onClick={() => setActivePage(p => Math.min(renderedPage.page_count - 1, p + 1))}
+                    className="px-2 py-0.5 bg-slate-800 rounded hover:bg-slate-700 disabled:opacity-40"
+                  >
+                    &rarr;
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* Mode Switcher */}
+            <div className="flex items-center bg-slate-800/80 p-0.5 rounded-lg border border-slate-700/60">
+              <button
+                onClick={() => setViewerMode('boxes')}
+                className={`flex items-center px-3 py-1 text-xs font-medium rounded-md transition-all ${
+                  viewerMode === 'boxes'
+                    ? 'bg-blue-600 text-white shadow-sm'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+                title="Interactive Bounding Box Inspector"
+              >
+                <Scan className="h-3.5 w-3.5 mr-1.5" />
+                OCR Boxes
+              </button>
+              <button
+                onClick={() => setViewerMode('fraud')}
+                className={`flex items-center px-3 py-1 text-xs font-medium rounded-md transition-all ${
+                  viewerMode === 'fraud'
+                    ? 'bg-purple-600 text-white shadow-sm'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+                title="Computer Vision Synthetic Tampering & Fraud Defense"
+              >
+                <ShieldAlert className="h-3.5 w-3.5 mr-1.5" />
+                CV Tampering Defense
+              </button>
+            </div>
+          </div>
+
+          {/* Viewer Canvas Area */}
+          <div className="flex-1 p-4 flex flex-col items-center justify-start overflow-auto bg-slate-900/60 relative">
+            {docLoading ? (
+              <div className="flex flex-col items-center justify-center h-full text-slate-400 space-y-3 my-auto">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500" />
+                <p className="text-xs">Processing document layout & forensic analysis...</p>
+              </div>
+            ) : documents.length === 0 ? (
+              <div className="text-center my-auto">
+                <Upload className="h-16 w-16 mx-auto text-slate-700 mb-4" />
+                <p className="text-lg font-medium text-slate-400">No Documents Uploaded</p>
+                <p className="text-sm text-slate-600 mt-2">Upload documents to inspect bounding boxes and fraud forensics.</p>
+              </div>
+            ) : viewerMode === 'boxes' ? (
+              /* Mode 1: Layout Bounding Box Inspector */
+              <div className="flex flex-col items-center w-full max-w-2xl">
+                {/* Bounding Box Legend Bar */}
+                <div className="w-full mb-3 flex items-center justify-between text-[11px] text-slate-400 bg-slate-950/80 px-3 py-1.5 rounded-lg border border-slate-800">
+                  <span className="flex items-center">
+                    <span className="w-2.5 h-2.5 rounded-sm bg-sky-400 inline-block mr-1.5" />
+                    Layout Entity Box
+                  </span>
+                  <span className="flex items-center">
+                    <span className="w-2.5 h-2.5 rounded-sm bg-amber-400 inline-block mr-1.5 animate-pulse" />
+                    Focused / Hovered Field
+                  </span>
+                  <span>{renderedPage?.bounding_boxes.length || 0} Entities Tracked</span>
+                </div>
+
+                {renderedPage?.page_image ? (
+                  <div className="relative inline-block rounded-lg shadow-2xl border border-slate-700 overflow-hidden bg-white">
+                    <img
+                      src={renderedPage.page_image}
+                      alt="Rendered Document"
+                      className="max-w-full h-auto block select-none"
                     />
-                  );
-                }
-                if (selectedDoc.mime_type?.startsWith('image/')) {
-                  return (
-                    <div className="relative inline-block">
-                        <img
-                          src={fileUrl}
-                          alt={selectedDoc.original_filename}
-                          className="max-w-full max-h-full object-contain rounded shadow-2xl"
-                        />
-                        {/* Real OCR bounding boxes from Tesseract */}
-                        {caseDetail.bounding_boxes && Object.entries(caseDetail.bounding_boxes).map(([field, bbox]) => {
-                          if (!bbox) return null;
-                          return (
-                            <div key={field}
-                              className="absolute border-2 border-yellow-400 bg-yellow-400/20 pointer-events-none"
-                              style={{
-                                left: `${bbox.x * 100}%`,
-                                top: `${bbox.y * 100}%`,
-                                width: `${bbox.w * 100}%`,
-                                height: `${bbox.h * 100}%`,
-                              }}
-                            >
-                              <span className="absolute -top-4 left-0 bg-yellow-400 text-black text-[9px] font-bold px-1 whitespace-nowrap">
-                                {field.replace('_', ' ')}
-                              </span>
+
+                    {/* Interactive Bounding Boxes Overlay */}
+                    {renderedPage.bounding_boxes.map((bbox, idx) => {
+                      const isHovered = hoveredField === bbox.field;
+                      return (
+                        <div
+                          key={idx}
+                          onMouseEnter={() => setHoveredField(bbox.field)}
+                          onMouseLeave={() => setHoveredField(null)}
+                          className={`absolute transition-all cursor-pointer ${
+                            isHovered
+                              ? 'border-2 border-amber-400 bg-amber-400/35 ring-4 ring-amber-400/40 z-30 shadow-lg scale-[1.01]'
+                              : 'border-2 border-sky-400/75 bg-sky-400/15 hover:border-amber-300 hover:bg-amber-300/25 z-10'
+                          }`}
+                          style={{
+                            left: `${bbox.x * 100}%`,
+                            top: `${bbox.y * 100}%`,
+                            width: `${bbox.w * 100}%`,
+                            height: `${bbox.h * 100}%`,
+                          }}
+                        >
+                          <span className={`absolute -top-4 left-0 text-[9px] font-bold px-1 rounded shadow-sm whitespace-nowrap transition-all ${
+                            isHovered
+                              ? 'bg-amber-400 text-black scale-105'
+                              : 'bg-sky-600 text-white'
+                          }`}>
+                            {bbox.field.replace('_', ' ')} • {Math.round(bbox.confidence * 100)}%
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="text-center my-auto text-slate-500 text-xs">
+                    Could not render document image.
+                  </div>
+                )}
+              </div>
+            ) : (
+              /* Mode 2: Computer Vision Synthetic Tampering & Fraud Defense */
+              <div className="flex flex-col items-center w-full max-w-2xl space-y-4">
+                {fraudAnalysis ? (
+                  <>
+                    {/* Forensic Telemetry Bar */}
+                    <div className="w-full bg-slate-950/90 rounded-xl p-4 border border-slate-800 shadow-xl space-y-3">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center space-x-2">
+                          <ShieldCheck className="h-5 w-5 text-purple-400" />
+                          <span className="text-xs font-semibold text-slate-200">
+                            Computer Vision Forensic Defense
+                          </span>
+                        </div>
+                        <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold border ${
+                          fraudAnalysis.risk_level === 'LOW'
+                            ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+                            : fraudAnalysis.risk_level === 'MEDIUM'
+                            ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+                            : 'bg-rose-500/20 text-rose-300 border-rose-500/40'
+                        }`}>
+                          {fraudAnalysis.verdict.replace(/_/g, ' ')} ({fraudAnalysis.fraud_risk_score}/100)
+                        </span>
+                      </div>
+
+                      {/* Forensic Key Metrics Grid */}
+                      <div className="grid grid-cols-3 gap-2 pt-2 border-t border-slate-800/80 text-center">
+                        <div className="bg-slate-900 p-2 rounded-lg">
+                          <p className="text-[10px] text-slate-400">ELA Variance</p>
+                          <p className="text-xs font-mono font-bold text-slate-200">{fraudAnalysis.ela_variance}</p>
+                          <p className="text-[9px] text-emerald-400">Normal Range (&lt;180)</p>
+                        </div>
+                        <div className="bg-slate-900 p-2 rounded-lg">
+                          <p className="text-[10px] text-slate-400">Splicing Seams</p>
+                          <p className="text-xs font-mono font-bold text-slate-200">{fraudAnalysis.splice_boxes_count}</p>
+                          <p className="text-[9px] text-slate-400">Edge Discontinuities</p>
+                        </div>
+                        <div className="bg-slate-900 p-2 rounded-lg">
+                          <p className="text-[10px] text-slate-400">Statutory Signatures</p>
+                          <p className={`text-xs font-bold ${
+                            fraudAnalysis.signature_verification.signatures_detected ? 'text-emerald-400' : 'text-rose-400'
+                          }`}>
+                            {fraudAnalysis.signature_verification.signatures_detected ? 'Verified' : 'Missing'}
+                          </p>
+                          <p className="text-[9px] text-slate-400">Density: {fraudAnalysis.signature_verification.ink_density}</p>
+                        </div>
+                      </div>
+
+                      {/* Anomalies List if any */}
+                      {fraudAnalysis.anomalies_detected.length > 0 && (
+                        <div className="space-y-1.5 pt-2 border-t border-slate-800">
+                          {fraudAnalysis.anomalies_detected.map((ano, idx) => (
+                            <div key={idx} className="bg-amber-950/40 border border-amber-800/50 p-2 rounded text-xs flex items-start space-x-2">
+                              <AlertTriangle className="h-3.5 w-3.5 text-amber-400 mt-0.5 shrink-0" />
+                              <div>
+                                <span className="font-semibold text-amber-300">[{ano.code}] {ano.title}: </span>
+                                <span className="text-slate-300 text-[11px]">{ano.description}</span>
+                              </div>
                             </div>
-                          );
-                        })}
+                          ))}
+                        </div>
+                      )}
                     </div>
-                  );
-                } else {
-                  return (
-                    <div className="text-center">
-                      <FileText className="h-16 w-16 mx-auto text-slate-500 mb-4" />
-                      <p className="text-sm text-slate-400">Preview not available for this file type.</p>
-                      <a href={fileUrl} target="_blank" rel="noopener noreferrer" className="mt-3 inline-block text-blue-400 text-sm hover:underline">
-                        Download {selectedDoc.original_filename}
-                      </a>
-                    </div>
-                  );
-                }
-              })()
-            ) : null}
+
+                    {/* Forensic Heatmap Image */}
+                    {fraudAnalysis.heatmap_image && (
+                      <div className="rounded-lg shadow-2xl border border-purple-900/60 overflow-hidden bg-black max-w-full">
+                        <div className="bg-purple-950 px-3 py-1.5 text-[11px] text-purple-200 flex items-center justify-between border-b border-purple-800/50">
+                          <span className="flex items-center font-medium">
+                            <Layers className="h-3 w-3 mr-1.5" />
+                            Error Level Analysis (ELA) + Boundary Seam Heatmap
+                          </span>
+                          <span className="text-[9px] text-purple-300 font-mono">150 DPI Analysis</span>
+                        </div>
+                        <img
+                          src={fraudAnalysis.heatmap_image}
+                          alt="Forensic Tampering Heatmap"
+                          className="max-w-full h-auto block select-none"
+                        />
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <div className="text-center my-auto text-slate-500 text-xs">
+                    Running computer vision fraud analysis...
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
 

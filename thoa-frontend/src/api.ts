@@ -180,3 +180,59 @@ export async function submitCorrection(
   }
 }
 
+export interface RenderedPageResponse {
+  page_number: number;
+  page_count: number;
+  page_image: string | null;
+  bounding_boxes: Array<{
+    field: string;
+    label: string;
+    x: number;
+    y: number;
+    w: number;
+    h: number;
+    confidence: number;
+  }>;
+  error?: string;
+}
+
+export interface FraudAnalysisResponse {
+  fraud_risk_score: number;
+  risk_level: 'LOW' | 'MEDIUM' | 'HIGH';
+  verdict: string;
+  ela_variance: number;
+  signature_verification: {
+    signature_zone_checked: boolean;
+    ink_density: number;
+    signatures_detected: boolean;
+    status: string;
+  };
+  anomalies_detected: Array<{
+    code: string;
+    severity: string;
+    title: string;
+    description: string;
+  }>;
+  splice_boxes_count: number;
+  heatmap_image?: string;
+}
+
+export async function fetchRenderedDocumentPage(
+  caseId: string,
+  docId: string,
+  page: number = 0
+): Promise<RenderedPageResponse> {
+  const res = await fetch(`${API_BASE_URL}/cases/${caseId}/documents/${docId}/rendered?page=${page}`);
+  if (!res.ok) throw new Error("Failed to fetch rendered document page");
+  return await res.json();
+}
+
+export async function fetchFraudAnalysis(
+  caseId: string,
+  docId: string
+): Promise<FraudAnalysisResponse> {
+  const res = await fetch(`${API_BASE_URL}/cases/${caseId}/documents/${docId}/fraud-check`);
+  if (!res.ok) throw new Error("Failed to fetch document fraud analysis");
+  return await res.json();
+}
+

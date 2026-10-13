@@ -21,6 +21,8 @@ from thoa_screening.database.models import (
 from thoa_screening.services.screening import screen_case, ScreeningError
 from thoa_screening.services.explanations import ExplanationGenerator
 from thoa_screening.services.audit import audit_log
+from thoa_screening.services.document_renderer import render_document_page
+from thoa_screening.services.fraud_detector import analyze_document_fraud
 
 router = APIRouter(prefix="/cases", tags=["cases"])
 
@@ -267,6 +269,51 @@ def serve_document_file(
             "Content-Disposition": f"inline; filename=\"{doc.original_filename}\""
         }
     )
+
+@router.get("/{case_id}/documents/{document_id}/rendered")
+def get_rendered_document(
+    case_id: uuid.UUID,
+    document_id: uuid.UUID,
+    page: int = 0,
+    db: Session = Depends(get_db)
+):
+    """
+    Renders a document page to high-res PNG image with layout-aware normalized bounding boxes.
+    """
+    doc = db.query(Document).filter(
+        Document.id == document_id,
+        Document.case_id == case_id
+    ).first()
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found.")
+    
+    if not os.path.isfile(doc.file_path):
+        raise HTTPException(status_code=404, detail="File not found on disk.")
+        
+    return render_document_page(doc.file_path, page_number=page)
+
+@router.get("/{case_id}/documents/{document_id}/fraud-check")
+def check_document_fraud(
+    case_id: uuid.UUID,
+    document_id: uuid.UUID,
+    db: Session = Depends(get_db)
+):
+    """
+    Performs Computer Vision synthetic tampering and forgery defense analysis:
+    Error Level Analysis (ELA), edge discontinuity/splicing detection,
+    and statutory signature presence verification.
+    """
+    doc = db.query(Document).filter(
+        Document.id == document_id,
+        Document.case_id == case_id
+    ).first()
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found.")
+        
+    if not os.path.isfile(doc.file_path):
+        raise HTTPException(status_code=404, detail="File not found on disk.")
+        
+    return analyze_document_fraud(doc.file_path, doc_type=doc.document_type.value)
 
 @router.get("/{case_id}/audit", response_model=List[AuditLogResponse], responses={404: {"model": ErrorResponse}})
 def get_audit_logs(
